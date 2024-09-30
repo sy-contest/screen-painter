@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Number Guessing Game</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div id="login-form">
+        <h2>Login</h2>
+        <input type="text" id="username" placeholder="Enter your username">
+        <input type="text" id="game-id" placeholder="Enter game ID">
+        <button id="login-button">Login</button>
+    </div>
+
+    <div id="game-area" style="display: none;">
+        <h2>Number Guessing Game</h2>
+        <p>Guess a number between 1 and 100</p>
+        <input type="number" id="guess-input" min="1" max="100">
+        <button id="guess-button">Make Guess</button>
+        <p id="result"></p>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
