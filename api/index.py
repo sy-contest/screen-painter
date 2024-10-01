@@ -33,24 +33,39 @@ def login():
     game = game_ref.get()
 
     if not game:
-        return jsonify({'success': False, 'message': 'Invalid game ID'}), 404
+        # Create a new game if it doesn't exist
+        game_ref.set({
+            'status': 'waiting_players',
+            'player1': {'username': None, 'ready': False, 'x': 0, 'y': 0},
+            'player2': {'username': None, 'ready': False, 'x': 0, 'y': 0},
+            'start_time': None,
+            'end_time': None
+        })
+        game = game_ref.get()
 
     if game['status'] == 'finished':
         return jsonify({'success': False, 'message': 'Game has already finished'}), 403
 
-    if game['player1'] == username:
+    if game['player1']['username'] == username:
         player = 'player1'
-    elif game['player2'] == username:
+    elif game['player2']['username'] == username:
         player = 'player2'
+    elif not game['player1']['username']:
+        player = 'player1'
+        game_ref.child('player1').update({'username': username})
+    elif not game['player2']['username']:
+        player = 'player2'
+        game_ref.child('player2').update({'username': username})
     else:
-        return jsonify({'success': False, 'message': 'Username not associated with this game'}), 403
+        return jsonify({'success': False, 'message': 'Game is full'}), 403
 
     session['username'] = username
     session['game_id'] = game_id
     session['player'] = player
 
-    if game['player1'] and game['player2']:
-        game_ref.update({'status': 'waiting_ready', 'player1_ready': False, 'player2_ready': False})
+    if game['player1']['username'] and game['player2']['username']:
+        game_ref.update({'status': 'waiting_ready'})
+
     return jsonify({'success': True, 'player': player})
 
 @app.route('/ready', methods=['POST'])
