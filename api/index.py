@@ -5,6 +5,7 @@ import firebase_admin
 from firebase_admin import credentials, db
 from dotenv import load_dotenv
 from .config import get_firebase_config
+import time
 
 load_dotenv()
 
@@ -49,9 +50,34 @@ def login():
     session['player'] = player
 
     if game['player1'] and game['player2']:
-        game_ref.update({'status': 'playing'})
-
+        game_ref.update({'status': 'waiting_ready', 'player1_ready': False, 'player2_ready': False})
     return jsonify({'success': True, 'player': player})
+
+@app.route('/ready', methods=['POST'])
+def ready():
+    if 'username' not in session or 'game_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+
+    game_id = session['game_id']
+    player = session['player']
+
+    game_ref = db.reference(f'games/{game_id}')
+    game = game_ref.get()
+
+    if not game:
+        return jsonify({'success': False, 'message': 'Game not found'}), 404
+
+    if game['status'] != 'waiting_ready':
+        return jsonify({'success': False, 'message': 'Game is not in waiting state'}), 400
+
+    game_ref.update({f'{player}_ready': True})
+    
+    updated_game = game_ref.get()
+    if updated_game['player1_ready'] and updated_game['player2_ready']:
+        game_ref.update({'status': 'playing', 'start_time': int(time.time())})
+        return jsonify({'success': True, 'message': 'Game started'})
+    
+    return jsonify({'success': True, 'message': 'Ready status updated'})
 
 @app.route('/make_guess', methods=['POST'])
 def make_guess():
@@ -94,6 +120,38 @@ def config():
     except Exception as e:
         app.logger.error(f"Error in config: {str(e)}")
         return jsonify({'error': 'Failed to get Firebase config'}), 500
+
+@app.route('/update_position', methods=['POST'])
+def update_position():
+    if 'username' not in session or 'game_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+
+    game_id = session['game_id']
+    player = session['player']
+    x = request.json.get('x')
+    y = request.json.get('y')
+
+    if x is None or y is None:
+        return jsonify({'success': False, 'message': 'Position data is required'}), 400
+
+    game_ref = db.reference(f'games/{game_id}')
+    game_ref.child(player).update({'x': x, 'y': y})
+
+    return jsonify({'success': True})
+
+@app.route('/game_state', methods=['GET'])
+def game_state():
+    if 'username' not in session or 'game_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+
+    game_id = session['game_id']
+    game_ref = db.reference(f'games/{game_id}')
+    game = game_ref.get()
+
+    if not game:
+        return jsonify({'success': False, 'message': 'Game not found'}), 404
+
+    return jsonify({'success': True, 'game': game})
 
 if __name__ == '__main__':
     app.run(debug=True)

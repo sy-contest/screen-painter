@@ -1,4 +1,9 @@
 let database;
+let gameState;
+let canvas, ctx;
+let joystick;
+let player;
+let gameLoop;
 
 fetch('/config')
     .then(response => response.json())
@@ -14,7 +19,7 @@ fetch('/config')
 
 function initializeEventListeners() {
     document.getElementById('login-button').addEventListener('click', login);
-    document.getElementById('guess-button').addEventListener('click', makeGuess);
+    document.getElementById('ready-button').addEventListener('click', ready);
 }
 
 function login() {
@@ -44,27 +49,128 @@ function login() {
     });
 }
 
-function makeGuess() {
-    const guess = document.getElementById('guess-input').value;
-
-    fetch('/make_guess', {
+function ready() {
+    fetch('/ready', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ guess }),
     })
     .then(response => response.json())
     .then(data => {
-        document.getElementById('result').textContent = data.message;
-        if (data.winner) {
-            alert('Congratulations! You won!');
+        if (data.success) {
+            if (data.message === 'Game started') {
+                startGame();
+            } else {
+                alert('Waiting for other player to be ready');
+            }
+        } else {
+            alert(data.message || 'Failed to update ready status');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred while making a guess');
+        alert('An error occurred while updating ready status');
     });
+}
+
+function startGame() {
+    canvas = document.getElementById('game-canvas');
+    ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    joystick = new VirtualJoystick({
+        container: document.body,
+        strokeStyle: 'cyan',
+        limitStickTravel: true,
+        stickRadius: 50
+    });
+
+    player = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: 20,
+        color: gameState.player === 'player1' ? 'blue' : 'red'
+    };
+
+    gameLoop = setInterval(updateGame, 1000 / 60);  // 60 FPS
+}
+
+function updateGame() {
+    // Update player position based on joystick input
+    if (joystick.right()) {
+        player.x += 2;
+    }
+    if (joystick.left()) {
+        player.x -= 2;
+    }
+    if (joystick.up()) {
+        player.y -= 2;
+    }
+    if (joystick.down()) {
+        player.y += 2;
+    }
+
+    // Keep player within canvas bounds
+    player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+    player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+    // Update player position in Firebase
+    updatePosition(player.x, player.y);
+
+    // Paint the canvas
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Get opponent's position and paint
+    fetch('/game_state')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                gameState = data.game;
+                const opponentPlayer = gameState.player === 'player1' ? 'player2' : 'player1';
+                const opponentColor = opponentPlayer === 'player1' ? 'blue' : 'red';
+                ctx.fillStyle = opponentColor;
+                ctx.beginPath();
+                ctx.arc(gameState[opponentPlayer].x, gameState[opponentPlayer].y, player.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Check if game has ended
+                if (gameState.status === 'finished') {
+                    endGame();
+                }
+            }
+        });
+}
+
+function updatePosition(x, y) {
+    fetch('/update_position', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ x, y }),
+    });
+}
+
+function endGame() {
+    clearInterval(gameLoop);
+    // Calculate the winner based on colored area
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let bluePixels = 0;
+    let redPixels = 0;
+    for (let i = 0; i < imageData.data.length; i += 4) {
+        if (imageData.data[i] === 0 && imageData.data[i + 1] === 0 && imageData.data[i + 2] === 255) {
+            bluePixels++;
+        } else if (imageData.data[i] === 255 && imageData.data[i + 1] === 0 && imageData.data[i + 2] === 0) {
+            redPixels++;
+        }
+    }
+    const winner = bluePixels > redPixels ? 'player1' : 'player2';
+    alert(`Game over! The winner is ${winner}`);
 }
 
 function listenForGameUpdates(gameId) {
