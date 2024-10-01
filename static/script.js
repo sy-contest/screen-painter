@@ -4,6 +4,7 @@ let canvas, ctx;
 let joystick;
 let player;
 let gameLoop;
+let currentPlayer;
 
 fetch('/config')
     .then(response => response.json())
@@ -36,6 +37,7 @@ function login() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            currentPlayer = data.player;
             document.getElementById('login-form').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
             listenForGameUpdates(gameId);
@@ -59,8 +61,9 @@ function ready() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            document.getElementById('ready-button').style.display = 'none';
             if (data.message === 'Game started') {
-                startGame();
+                fetchGameStateAndStart();
             } else {
                 alert('Waiting for other player to be ready');
             }
@@ -72,6 +75,23 @@ function ready() {
         console.error('Error:', error);
         alert('An error occurred while updating ready status');
     });
+}
+
+function fetchGameStateAndStart() {
+    fetch('/game_state')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                gameState = data.game;
+                startGame();
+            } else {
+                alert('Failed to fetch game state');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while fetching game state');
+        });
 }
 
 function startGame() {
@@ -91,7 +111,7 @@ function startGame() {
         x: canvas.width / 2,
         y: canvas.height / 2,
         radius: 20,
-        color: gameState.player === 'player1' ? 'blue' : 'red'
+        color: currentPlayer === 'player1' ? 'blue' : 'red'
     };
 
     joystick.on('move', (evt, data) => {
@@ -121,24 +141,17 @@ function updateGame() {
     ctx.fill();
 
     // Get opponent's position and paint
-    fetch('/game_state')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                gameState = data.game;
-                const opponentPlayer = gameState.player === 'player1' ? 'player2' : 'player1';
-                const opponentColor = opponentPlayer === 'player1' ? 'blue' : 'red';
-                ctx.fillStyle = opponentColor;
-                ctx.beginPath();
-                ctx.arc(gameState[opponentPlayer].x, gameState[opponentPlayer].y, player.radius, 0, Math.PI * 2);
-                ctx.fill();
+    const opponentPlayer = currentPlayer === 'player1' ? 'player2' : 'player1';
+    const opponentColor = opponentPlayer === 'player1' ? 'blue' : 'red';
+    ctx.fillStyle = opponentColor;
+    ctx.beginPath();
+    ctx.arc(gameState[opponentPlayer].x, gameState[opponentPlayer].y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
 
-                // Check if game has ended
-                if (gameState.status === 'finished') {
-                    endGame();
-                }
-            }
-        });
+    // Check if game has ended
+    if (gameState.status === 'finished') {
+        endGame();
+    }
 }
 
 function updatePosition(x, y) {
@@ -153,6 +166,9 @@ function updatePosition(x, y) {
 
 function endGame() {
     clearInterval(gameLoop);
+    if (joystick) {
+        joystick.destroy();
+    }
     // Calculate the winner based on colored area
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     let bluePixels = 0;
@@ -171,9 +187,11 @@ function endGame() {
 function listenForGameUpdates(gameId) {
     const gameRef = database.ref(`games/${gameId}`);
     gameRef.on('value', (snapshot) => {
-        const game = snapshot.val();
-        if (game.status === 'finished') {
-            alert(`Game over! The winner is ${game.winner}`);
+        gameState = snapshot.val();
+        if (gameState.status === 'playing' && !gameLoop) {
+            startGame();
+        } else if (gameState.status === 'finished') {
+            endGame();
         }
     });
 }
