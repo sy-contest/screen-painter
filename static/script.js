@@ -80,12 +80,12 @@ function startGame() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    joystick = new VirtualJoystick({
-        container: document.body,
-        strokeStyle: 'cyan',
-        limitStickTravel: true,
-        stickRadius: 50
-    });
+    const joystickOptions = {
+        zone: document.body,
+        color: 'blue',
+        size: 100
+    };
+    joystick = nipplejs.create(joystickOptions);
 
     player = {
         x: canvas.width / 2,
@@ -94,30 +94,25 @@ function startGame() {
         color: gameState.player === 'player1' ? 'blue' : 'red'
     };
 
+    joystick.on('move', (evt, data) => {
+        const speed = 2;
+        player.x += data.vector.x * speed;
+        player.y += data.vector.y * speed;
+    });
+
     gameLoop = setInterval(updateGame, 1000 / 60);  // 60 FPS
 }
 
 function updateGame() {
-    // Update player position based on joystick input
-    if (joystick.right()) {
-        player.x += 2;
-    }
-    if (joystick.left()) {
-        player.x -= 2;
-    }
-    if (joystick.up()) {
-        player.y -= 2;
-    }
-    if (joystick.down()) {
-        player.y += 2;
-    }
-
     // Keep player within canvas bounds
     player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
     player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
 
     // Update player position in Firebase
     updatePosition(player.x, player.y);
+
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Paint the canvas
     ctx.fillStyle = player.color;

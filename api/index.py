@@ -70,7 +70,7 @@ def login():
 
 @app.route('/ready', methods=['POST'])
 def ready():
-    if 'username' not in session or 'game_id' not in session:
+    if 'username' not in session or 'game_id' not in session or 'player' not in session:
         return jsonify({'success': False, 'message': 'Not logged in'}), 401
 
     game_id = session['game_id']
@@ -85,11 +85,16 @@ def ready():
     if game['status'] != 'waiting_ready':
         return jsonify({'success': False, 'message': 'Game is not in waiting state'}), 400
 
-    game_ref.update({f'{player}_ready': True})
+    game_ref.child(player).update({'ready': True})
     
     updated_game = game_ref.get()
-    if updated_game['player1_ready'] and updated_game['player2_ready']:
-        game_ref.update({'status': 'playing', 'start_time': int(time.time())})
+    if updated_game['player1']['ready'] and updated_game['player2']['ready']:
+        start_time = int(time.time())
+        game_ref.update({
+            'status': 'playing',
+            'start_time': start_time,
+            'end_time': start_time + 30  # 30 seconds game duration
+        })
         return jsonify({'success': True, 'message': 'Game started'})
     
     return jsonify({'success': True, 'message': 'Ready status updated'})
